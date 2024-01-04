@@ -1,0 +1,62 @@
+---
+- name: Configure Wake-on-LAN
+  hosts: pc
+  become: yes
+
+  tasks:
+    - name: Install ethtool
+      become: yes
+      apt:
+        name: ethtool
+        state: present
+
+    - name: Détecter le nom de l'interface réseau
+      shell:
+        cmd: "ip link show up | awk -F: '$2 && $2 !~ /lo/ {print $2; exit}'"
+      register: ethtool_info
+      ignore_errors: yes
+
+    - name: Afficher les informations de la carte réseau
+      command: "ethtool {{ ethtool_info.stdout }}"
+      register: ethtool_result
+      ignore_errors: yes
+      when: ethtool_info.rc == 0
+
+    - name: Activer le Wake-on-LAN
+      command: "ethtool -s {{ ethtool_info.stdout }} wol g"
+      when: "'Supports Wake-on: g' not in ethtool_result.stdout and ethtool_info.rc == 0"
+      ignore_errors: yes
+
+    - name: Créer un fichier de service WoL
+      copy:
+        content: |
+          [Unit]
+          Description=Configure Wake-on-LAN
+
+          [Service]
+          ExecStart=/sbin/ethtool -s {{ ethtool_info.stdout }} wol g
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/wol.service
+      notify: Restart WoL Service
+      when: ethtool_info.rc == 0
+
+  handlers:
+    - name: Restart WoL Service
+      systemd:
+        name: wol
+        state: restarted
+      when: ethtool_info.rc == 0
+
+- name: Activer et démarrer le service WoL
+  hosts: pc
+  become: yes
+
+  tasks:
+    - name: Activer et démarrer le service WoL
+      systemd:
+        name: wol
+        enabled: yes
+        state: started
+      when: ethtool_info.rc == 0
