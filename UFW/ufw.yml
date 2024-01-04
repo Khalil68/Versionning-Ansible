@@ -1,0 +1,25 @@
+---
+- name: Configure UFW for SSH
+  hosts: firewall
+  become: yes
+  become_method: sudo
+  become_user: root
+  tasks:
+    - name: Allow SSH from specified IP ranges
+      ufw:
+        rule: allow
+        port: 22
+        src: "{{ item }}"
+      ignore_errors: yes
+      with_items:
+        - 10.0.20.0/27
+        - 10.0.100.101
+        - 172.16.90.200/29
+        - 172.16.85.200/29
+
+    - name: Deny SSH from all other sources
+      ufw:
+        rule: deny
+        port: 22
+        src: 0.0.0.0/0
+      ignore_errors: yes
